@@ -1,0 +1,65 @@
+GENERATOR: 
+    PackageName: fbink
+    PackageDescription: "Package fbink provides Go bindings for FBInk implementation by NiLuJe"
+    PackageLicense: "FBInk is licenced under the GPL3 licence"
+    # This is the header include path for the generated CGO code
+    Includes: ["../../fbink.h"]
+    Options:
+        SafeStrings: true
+    FlagGroups:
+        # These flags will be added to the CGO code
+        - {name: "LDFLAGS", flags: ["-L${SRCDIR}/../../Release", "-lfbink", "-lm"]}
+PARSER:
+    # Where the compiler c-for-go uses can find system headers. Note, FBInk seems to require the compiler
+    # find <stddefs.h>, which is compiler specific.
+    # TODO: Figure out a way of more portably defining these includes 
+    IncludePaths: 
+        - "/home/sherman/x-tools/arm-kobo-linux-gnueabihf/arm-kobo-linux-gnueabihf/sysroot/usr/include/"
+        - "/home/sherman/x-tools/arm-kobo-linux-gnueabihf/lib/gcc/arm-kobo-linux-gnueabihf/7.2.1/include/"
+    # Where c-for-go can find the "source" files it will be generating bindings for.
+    SourcesPaths: ["../fbink.h"]
+TRANSLATOR:
+    # How constants and enums should be evaluated by c-for-go
+    ConstRules:
+        defines: eval
+        enum: eval
+    # Determines how c pointers should be handled for functions (eg, whether to use pointers or slices etc.)
+    PtrTips:
+        function:
+            # Treat pointers as go pointers. The c-for-go docs encourage being a lot more specific than this...
+            - {target: "^fbink_", default: ref}
+    # This section determines naming rules, and which functions, constants and variables get included in the
+    # final output binding.
+    Rules:
+        global:
+            - {action: accept, from: "^fbink_"}
+            # CGO doesn't support variadic arguments, so we don't include fbink_printf
+            - {action: ignore, from: "^fbink_printf"}
+            # fbink_is_fb_quirky is depreciated, so ignore it
+            - {action: ignore, from: "^fbink_is_fb_quirky"}
+            # This rule should add the structs
+            - {action: accept, from: "^FBInk"}
+            - {action: accept, from: "^FBFD_AUTO"}
+            # Accept all the members of the font enum. Unfortunately there's no common name/prefix, hense the big long regex
+            - {action: accept, from: "^IBM|^UNSCII|^BLOCK|^[LV]EGGIE|^KATES|^FKP|^CTRLD|^ORP|^SCIENTIFICA|^TERMINUS|^FATTY|^SPLEEN|^TEWI|^TOPAZ|^MICROKNIGHT|^VGA"}
+            # Accept all the members of the alignment enum
+            - {action: accept, from: "^NONE|^CENTER|^EDGE"}
+            # Accept other enums. They have a prefix, which makes selecting them easier
+            - {action: accept, from: "^FNT_|^FG_|^BG_|^WFM_|^HWD_|^NTX_"}
+            # Get the enum typedefs. Yay for being uppercase :)
+            - {action: accept, from: "_T$"}
+        type:
+            # Prepare the enum typedefs for more idiomatic Go naming
+            - {transform: lower}
+            - {action: replace, from: "_T$"}
+        const:
+            # Make our constants lowercase
+            - {transform: lower}
+        function:
+            # Remove the fbink_ prefix from function names
+            - {action: replace, from: "^fbink_"}
+        post-global: 
+            # Final renaming to idiomatic Go naming. Currently exports function parameters which isn't
+            # ideal. That may require looking at.
+            - {transform: export}
+            - {load: snakecase}
